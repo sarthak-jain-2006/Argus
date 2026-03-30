@@ -28,7 +28,11 @@ Unified backend for exact and approximate SQL execution, plan parsing, and plan 
 
 3. Start API server from project root:
 
-   uvicorn backend.main:app --reload --app-dir aetherquery
+   .venv/bin/python -m uvicorn backend.main:app --reload
+
+   If you are inside the backend directory, use:
+
+   ../.venv/bin/python -m uvicorn main:app --reload --app-dir ..
 
 4. Open docs:
 
@@ -45,3 +49,5 @@ Unified backend for exact and approximate SQL execution, plan parsing, and plan 
 
 - DuckDB default file is at datasets/aetherquery.duckdb.
 - Postgres and MySQL connections are configured via environment variables.
+- If you see ModuleNotFoundError: No module named 'backend', run uvicorn from the project root (WT26) with backend.main:app.
+- If you see No module named uvicorn after activating the venv, check for a shell alias: run command `alias python`. If it points to system Python, use `.venv/bin/python` explicitly.

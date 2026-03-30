@@ -8,7 +8,7 @@ function App() {
   const [result, setResult] = useState<any | null>(null);
   const [suggestedQueries, setSuggestedQueries] = useState<string[]>([]);
 
-  const backend = "http://127.0.0.1:8000";
+  const backend = "http://127.0.0.1:8093";
 
   // -----------------------
   // Upload CSV Handler
