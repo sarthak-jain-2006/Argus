@@ -1,6 +1,7 @@
 import os
 import time
 import importlib
+import getpass
 from typing import Any
 
 
@@ -11,13 +12,26 @@ def _get_connection():
     except ImportError as exc:
         raise RuntimeError("psycopg is required for postgres source") from exc
 
-    return psycopg.connect(
-        host=os.getenv("PGHOST", "localhost"),
-        port=int(os.getenv("PGPORT", "5432")),
-        dbname=os.getenv("PGDATABASE", "postgres"),
-        user=os.getenv("PGUSER", "postgres"),
-        password=os.getenv("PGPASSWORD", "postgres"),
-    )
+    host = os.getenv("PGHOST", "localhost")
+    port = int(os.getenv("PGPORT", "5432"))
+    dbname = os.getenv("PGDATABASE", "tpch")
+    user = os.getenv("PGUSER", getpass.getuser())
+    password = os.getenv("PGPASSWORD", "")
+
+    try:
+        return psycopg.connect(
+            host=host,
+            port=port,
+            dbname=dbname,
+            user=user,
+            password=password,
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "Postgres connection failed. "
+            f"Tried host={host} port={port} db={dbname} user={user}. "
+            "Set PGHOST/PGPORT/PGDATABASE/PGUSER/PGPASSWORD to your local Postgres values."
+        ) from exc
 
 
 def execute_query(query: str) -> dict[str, Any]:

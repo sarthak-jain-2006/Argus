@@ -1,10 +1,9 @@
 import { useState } from "react";
 import PlanGraph from "../components/PlanGraph";
-import { planToFlow } from "../utils/planToFlow";
 
 export default function QueryPlanPage() {
   const [query, setQuery] = useState("");
-  const [flow, setFlow] = useState(null);
+  const [plan, setPlan] = useState<any | null>(null);
 
   async function analyzeQuery() {
     const res = await fetch("http://localhost:8093/api/sql/parse-plan", {
@@ -14,9 +13,7 @@ export default function QueryPlanPage() {
     });
 
     const data = await res.json();
-    const { nodes, edges } = planToFlow(data.plan_tree);
-
-    setFlow({ nodes, edges });
+    setPlan(data.plan_tree ?? null);
   }
 
   return (
@@ -34,7 +31,7 @@ export default function QueryPlanPage() {
         Analyze Query
       </button>
 
-      {flow && <PlanGraph nodes={flow.nodes} edges={flow.edges} />}
+      {plan && <PlanGraph plan={plan} />}
     </div>
   );
 }

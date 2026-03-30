@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import PlanGraph from "./components/PlanGraph";
 
 function App() {
@@ -6,9 +6,22 @@ function App() {
   const [query, setQuery] = useState("");
   const [plan, setPlan] = useState<any | null>(null);
   const [result, setResult] = useState<any | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<"exact" | "approx">("exact");
+  const [source, setSource] = useState<"duckdb" | "postgres" | "mysql">(
+    "duckdb",
+  );
   const [suggestedQueries, setSuggestedQueries] = useState<string[]>([]);
 
   const backend = "http://127.0.0.1:8093";
+  const csvMode = tableName !== null;
+
+  const getEffectiveSource = (): "duckdb" | "postgres" | "mysql" => {
+    if (csvMode) {
+      return "duckdb";
+    }
+    return source;
+  };
 
   // -----------------------
   // Upload CSV Handler
@@ -34,6 +47,8 @@ function App() {
 
     const tbl = data.table_name;
     setTableName(tbl);
+    setSource("duckdb");
+    setMode("exact");
 
     setSuggestedQueries([
       `SELECT * FROM ${tbl} LIMIT 5;`,
@@ -47,14 +62,20 @@ function App() {
   // -----------------------
   const handleAnalyze = async () => {
     if (!query.trim()) return;
+    setError(null);
+    const effectiveSource = getEffectiveSource();
 
     const res = await fetch(`${backend}/api/sql/parse-plan`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, source: effectiveSource }),
     });
 
     const data = await res.json();
+    if (!res.ok) {
+      setError(data?.detail || "Failed to analyze query");
+      return;
+    }
     setPlan(data.plan_tree ?? null);
   };
 
@@ -63,14 +84,21 @@ function App() {
   // -----------------------
   const handleExecute = async () => {
     if (!query.trim()) return;
+    setError(null);
+    const effectiveSource = getEffectiveSource();
 
     const res = await fetch(`${backend}/api/sql/execute`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, mode, source: effectiveSource }),
     });
 
     const data = await res.json();
+    if (!res.ok) {
+      setResult(null);
+      setError(data?.detail || "Query execution failed");
+      return;
+    }
     setResult(data);
   };
 
@@ -83,7 +111,7 @@ function App() {
         minHeight: "100vh",
       }}
     >
-      <h1>AetherQuery — Plan Visualizer</h1>
+      <h1>Query Executor Workspace</h1>
 
       {/* ---------------- Upload CSV ---------------- */}
       <div style={{ marginTop: "20px", marginBottom: "20px" }}>
@@ -107,6 +135,13 @@ function App() {
       {tableName && (
         <p>
           <strong>Loaded Table:</strong> {tableName}
+        </p>
+      )}
+
+      {csvMode && (
+        <p style={{ color: "#a0d8ff", marginTop: "6px" }}>
+          CSV mode is active. Queries are forced to DuckDB and will not run on
+          Postgres/MySQL.
         </p>
       )}
 
@@ -143,6 +178,42 @@ function App() {
       )}
 
       {/* ---------------- Query Textbox ---------------- */}
+      <div style={{ marginTop: "20px", display: "flex", gap: "10px" }}>
+        <div>
+          <label style={{ display: "block", marginBottom: "5px" }}>Mode</label>
+          <select
+            value={mode}
+            onChange={(e) => setMode(e.target.value as "exact" | "approx")}
+            style={{ padding: "6px", background: "#2d2d2d", color: "white" }}
+          >
+            <option value="exact">exact</option>
+            <option value="approx">approx</option>
+          </select>
+        </div>
+        <div>
+          <label style={{ display: "block", marginBottom: "5px" }}>
+            Source
+          </label>
+          <select
+            value={source}
+            onChange={(e) =>
+              setSource(e.target.value as "duckdb" | "postgres" | "mysql")
+            }
+            style={{ padding: "6px", background: "#2d2d2d", color: "white" }}
+            disabled={csvMode}
+          >
+            <option value="duckdb">duckdb</option>
+            <option value="postgres">postgres</option>
+            <option value="mysql">mysql</option>
+          </select>
+          {csvMode && (
+            <div style={{ fontSize: "12px", marginTop: "4px", color: "#aaa" }}>
+              locked to duckdb
+            </div>
+          )}
+        </div>
+      </div>
+
       <textarea
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -221,15 +292,40 @@ function App() {
       )}
 
       {/* ---------------- Query Execution Output ---------------- */}
+      {error && (
+        <div style={{ marginTop: "20px", color: "#ff7070" }}>
+          <strong>Error:</strong> {error}
+        </div>
+      )}
+
       {result && (
         <div style={{ marginTop: "40px" }}>
           <h3>Query Output</h3>
+          <div style={{ marginBottom: "10px" }}>
+            <div>Mode: {result.approx ? "approx" : "exact"}</div>
+            <div>Source: {result.source ?? getEffectiveSource()}</div>
+            <div>
+              Time:{" "}
+              {typeof result.time === "number"
+                ? `${result.time.toFixed(6)} s`
+                : "n/a"}
+            </div>
+            {result.sample_rate && <div>Sample rate: {result.sample_rate}</div>}
+            {result.rewritten_query && (
+              <div style={{ marginTop: "8px" }}>
+                <strong>Rewritten Query:</strong>
+                <pre style={{ background: "#111", padding: "10px" }}>
+                  {result.rewritten_query}
+                </pre>
+              </div>
+            )}
+          </div>
 
-          {result.success && (
+          {Array.isArray(result.rows) && result.rows.length > 0 && (
             <table style={{ width: "600px", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
-                  {result.columns?.map((c: string) => (
+                  {(result.columns ?? []).map((c: string) => (
                     <th
                       key={c}
                       style={{ border: "1px solid white", padding: "5px" }}
@@ -241,7 +337,7 @@ function App() {
               </thead>
 
               <tbody>
-                {result.rows?.map((row: any[], idx: number) => (
+                {result.rows.map((row: any[], idx: number) => (
                   <tr key={idx}>
                     {row.map((v, i) => (
                       <td
@@ -255,6 +351,18 @@ function App() {
                 ))}
               </tbody>
             </table>
+          )}
+
+          {!Array.isArray(result.rows) && result.result !== undefined && (
+            <pre
+              style={{ background: "#111", padding: "20px", width: "600px" }}
+            >
+              {JSON.stringify(result.result, null, 2)}
+            </pre>
+          )}
+
+          {Array.isArray(result.rows) && result.rows.length === 0 && (
+            <p>No rows returned.</p>
           )}
         </div>
       )}
